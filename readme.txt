@@ -65,7 +65,7 @@ WooCommerce will now load Klingon strings automatically — both the PHP admin a
 
 = Will other plugins be translated too? =
 
-No — only WooCommerce strings are covered. To add translations for other plugins, drop their `.mo` / `.l10n.php` / `.json` files into the `languages/` folder and extend the relevant filters in `klingon-locale.php` (`load_textdomain_mofile`, `load_translation_file`, `load_script_translation_file`).
+No — only WooCommerce strings are covered. To add translations for other plugins, drop their `.mo` / `.l10n.php` / `.json` files into the `languages/` folder and extend the relevant filters in `klingon-for-woocommerce.php` (`load_textdomain_mofile`, `load_translation_file`, `load_script_translation_file`).
 
 = The dropdown still shows "tlh" — what happened? =
 
