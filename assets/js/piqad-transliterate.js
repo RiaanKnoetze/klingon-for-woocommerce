@@ -71,6 +71,23 @@
 
 	var PATTERN = /tlh|ch|gh|ng|[a-zA-Z'0-9]/g;
 
+	// Visual fallbacks for Latin letters that have no Klingon phoneme
+	// (c alone, f, g alone, k, x, z). Without these, untranslated English
+	// strings like "WooCommerce", "Coupons", "Plugins" would leak Latin
+	// glyphs in among the pIqaD. Substitutions favour the closest-sounding
+	// pIqaD glyph (k→q, c→ch, g→gh, f→v, x→H, z→S) — phonetically wrong,
+	// but the goal here is consistent pIqaD-script appearance, not Klingon
+	// pronunciation. Translated Klingon strings never use these letters,
+	// so this only affects untranslated text.
+	var FALLBACK = {
+		'c': chr( 0xF8D2 ), // ch
+		'f': chr( 0xF8E6 ), // v
+		'g': chr( 0xF8D5 ), // gh
+		'k': chr( 0xF8DF ), // q
+		'x': chr( 0xF8D6 ), // H
+		'z': chr( 0xF8E2 )  // S
+	};
+
 	var SKIP_TAGS = {
 		SCRIPT:   true,
 		STYLE:    true,
@@ -103,7 +120,25 @@
 
 	function transliterate( text ) {
 		return text.replace( PATTERN, function ( match ) {
-			return MAP[ match ] || match;
+			if ( MAP[ match ] ) {
+				return MAP[ match ];
+			}
+			// Case-folded fallback: many Latin letters appear in Klingon
+			// only in one case (D, H, I, Q, S uppercase; a, b, e, j, l, m,
+			// n, o, p, r, t, u, v, w, y lowercase). Without this fold,
+			// the opposite case (W, P, d, s, h, i, …) renders as Latin
+			// alongside the pIqaD glyphs and looks broken.
+			var lower = match.toLowerCase();
+			if ( MAP[ lower ] ) {
+				return MAP[ lower ];
+			}
+			var upper = match.toUpperCase();
+			if ( MAP[ upper ] ) {
+				return MAP[ upper ];
+			}
+			// Last resort: phonetic substitute for letters with no
+			// Klingon counterpart at all (c/f/g/k/x/z standalone).
+			return FALLBACK[ lower ] || match;
 		} );
 	}
 
