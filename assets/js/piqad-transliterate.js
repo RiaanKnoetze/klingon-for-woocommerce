@@ -1,99 +1,46 @@
 /**
- * Klingon pIqaD transliterator.
+ * Klingon pIqaD post-processor.
  *
- * Walks the DOM and replaces Latin-Okrandian Klingon text in text nodes
- * with KLI pIqaD Private Use Area codepoints (U+F8D0 - U+F8F9), so the
- * bundled pIqaD font can render proper glyphs.
+ * Scans DOM text nodes for marker pairs that the server-side gettext filter
+ * placed around actually-translated Klingon strings. For each marked region:
  *
- * Skips form inputs (<input>, <textarea>, contenteditable) so users can
- * still type Latin Klingon without the page rewriting their input. Also
- * skips <script>, <style>, <code>, <pre>, <kbd>, <samp> for the same reason.
+ *   1. Splits the surrounding text node so the marked content sits in its
+ *      own text fragment.
+ *   2. Wraps that fragment in <span class="klingon-piqad-text">…</span> so
+ *      the bundled CSS can apply the pIqaD font scoped to translated text.
+ *   3. Strips the marker characters.
  *
- * Uses MutationObserver to handle React/Block-Editor content that mounts
- * after initial DOM ready.
+ * Untranslated English strings have no markers and get left alone — the
+ * pIqaD font never touches them, so admin-bar items WP hasn't translated
+ * yet stay readable in English.
  *
- * Codepoint reference (KLI registry, Unicode PUA):
- *   a=F8D0  b=F8D1  ch=F8D2  D=F8D3  e=F8D4  gh=F8D5  H=F8D6  I=F8D7
- *   j=F8D8  l=F8D9  m=F8DA   n=F8DB  ng=F8DC o=F8DD   p=F8DE  q=F8DF
- *   Q=F8E0  r=F8E1  S=F8E2   t=F8E3  tlh=F8E4 u=F8E5  v=F8E6  w=F8E7
- *   y=F8E8  '=F8E9
- *   0=F8F0..9=F8F9
+ * Markers are two unused codepoints in the KLI Private Use Area
+ * (U+F8FA / U+F8FB) — invisible to most fonts, harmless if they leak into
+ * attributes or other contexts.
+ *
+ * MutationObserver picks up React/Block-Editor mounts that happen after
+ * initial DOM ready.
  */
 
 ( function () {
 	'use strict';
 
-	function chr( cp ) {
-		return String.fromCharCode( cp );
-	}
+	// Same start/end codepoints the PHP filter wraps translations with.
+	var MARK_START = String.fromCharCode( 0xF8FA );
+	var MARK_END   = String.fromCharCode( 0xF8FB );
 
-	// Latin Klingon -> KLI pIqaD PUA codepoints.
-	// Multi-character letters (tlh, ch, gh, ng) MUST come first in the
-	// regex alternation so the longest match wins.
-	var MAP = {
-		'tlh': chr( 0xF8E4 ),
-		'ch':  chr( 0xF8D2 ),
-		'gh':  chr( 0xF8D5 ),
-		'ng':  chr( 0xF8DC ),
-		'a':   chr( 0xF8D0 ),
-		'b':   chr( 0xF8D1 ),
-		'D':   chr( 0xF8D3 ),
-		'e':   chr( 0xF8D4 ),
-		'H':   chr( 0xF8D6 ),
-		'I':   chr( 0xF8D7 ),
-		'j':   chr( 0xF8D8 ),
-		'l':   chr( 0xF8D9 ),
-		'm':   chr( 0xF8DA ),
-		'n':   chr( 0xF8DB ),
-		'o':   chr( 0xF8DD ),
-		'p':   chr( 0xF8DE ),
-		'q':   chr( 0xF8DF ),
-		'Q':   chr( 0xF8E0 ),
-		'r':   chr( 0xF8E1 ),
-		'S':   chr( 0xF8E2 ),
-		't':   chr( 0xF8E3 ),
-		'u':   chr( 0xF8E5 ),
-		'v':   chr( 0xF8E6 ),
-		'w':   chr( 0xF8E7 ),
-		'y':   chr( 0xF8E8 ),
-		"'":   chr( 0xF8E9 ),
-		'0':   chr( 0xF8F0 ),
-		'1':   chr( 0xF8F1 ),
-		'2':   chr( 0xF8F2 ),
-		'3':   chr( 0xF8F3 ),
-		'4':   chr( 0xF8F4 ),
-		'5':   chr( 0xF8F5 ),
-		'6':   chr( 0xF8F6 ),
-		'7':   chr( 0xF8F7 ),
-		'8':   chr( 0xF8F8 ),
-		'9':   chr( 0xF8F9 )
-	};
-
-	var PATTERN = /tlh|ch|gh|ng|[a-zA-Z'0-9]/g;
+	// Match `MARK_START … MARK_END` non-greedily across a single text node.
+	var MARK_RE = new RegExp( MARK_START + '([\\s\\S]*?)' + MARK_END, 'g' );
 
 	var SKIP_TAGS = {
 		SCRIPT:   true,
-		STYLE:    true,
-		TEXTAREA: true,
-		INPUT:    true,
-		CODE:     true,
-		PRE:      true,
-		KBD:      true,
-		SAMP:     true
+		STYLE:    true
 	};
 
-	function shouldSkip( textNode ) {
-		var parent = textNode.parentElement;
-		if ( ! parent ) {
-			return true;
-		}
-		if ( SKIP_TAGS[ parent.tagName ] ) {
-			return true;
-		}
-		// Walk up looking for contenteditable.
-		var el = parent;
+	function isInsideSkippedTag( textNode ) {
+		var el = textNode.parentElement;
 		while ( el ) {
-			if ( el.isContentEditable ) {
+			if ( SKIP_TAGS[ el.tagName ] ) {
 				return true;
 			}
 			el = el.parentElement;
@@ -101,27 +48,46 @@
 		return false;
 	}
 
-	function transliterate( text ) {
-		return text.replace( PATTERN, function ( match ) {
-			return MAP[ match ] || match;
-		} );
-	}
-
+	/**
+	 * Replace a single text node containing one or more marker pairs with a
+	 * sequence of plain text + <span class="klingon-piqad-text"> nodes.
+	 */
 	function processTextNode( node ) {
-		// Idempotency: once we've transliterated a node, tag the parent
-		// element so re-walks (e.g. via MutationObserver) skip the work.
-		if ( ! node.parentElement || node.parentElement.dataset.klingonPiqad === '1' ) {
+		var raw = node.nodeValue;
+		if ( raw.indexOf( MARK_START ) === -1 ) {
 			return;
 		}
-		var original = node.nodeValue;
-		var transformed = transliterate( original );
-		if ( transformed !== original ) {
-			node.nodeValue = transformed;
-			node.parentElement.dataset.klingonPiqad = '1';
+
+		var parent = node.parentNode;
+		if ( ! parent ) {
+			return;
 		}
+
+		var frag = document.createDocumentFragment();
+		var lastIndex = 0;
+		var m;
+		MARK_RE.lastIndex = 0;
+		while ( ( m = MARK_RE.exec( raw ) ) !== null ) {
+			// Plain text before the marker.
+			if ( m.index > lastIndex ) {
+				frag.appendChild( document.createTextNode( raw.slice( lastIndex, m.index ) ) );
+			}
+			// The marked region wrapped in a span.
+			var span = document.createElement( 'span' );
+			span.className = 'klingon-piqad-text';
+			span.textContent = m[ 1 ];
+			frag.appendChild( span );
+			lastIndex = m.index + m[ 0 ].length;
+		}
+		// Trailing plain text.
+		if ( lastIndex < raw.length ) {
+			frag.appendChild( document.createTextNode( raw.slice( lastIndex ) ) );
+		}
+
+		parent.replaceChild( frag, node );
 	}
 
-	function walkAndTransform( root ) {
+	function walkAndWrap( root ) {
 		if ( ! root || root.nodeType !== Node.ELEMENT_NODE ) {
 			return;
 		}
@@ -130,9 +96,12 @@
 			NodeFilter.SHOW_TEXT,
 			{
 				acceptNode: function ( node ) {
-					return shouldSkip( node )
-						? NodeFilter.FILTER_REJECT
-						: NodeFilter.FILTER_ACCEPT;
+					if ( isInsideSkippedTag( node ) ) {
+						return NodeFilter.FILTER_REJECT;
+					}
+					return node.nodeValue.indexOf( MARK_START ) !== -1
+						? NodeFilter.FILTER_ACCEPT
+						: NodeFilter.FILTER_SKIP;
 				}
 			}
 		);
@@ -141,6 +110,8 @@
 		while ( ( n = walker.nextNode() ) ) {
 			nodes.push( n );
 		}
+		// Process collected nodes outside the walker — replaceChild during
+		// iteration would disturb the walk.
 		for ( var i = 0; i < nodes.length; i++ ) {
 			processTextNode( nodes[ i ] );
 		}
@@ -148,14 +119,16 @@
 
 	function handleAddedNode( node ) {
 		if ( node.nodeType === Node.ELEMENT_NODE ) {
-			walkAndTransform( node );
-		} else if ( node.nodeType === Node.TEXT_NODE && ! shouldSkip( node ) ) {
-			processTextNode( node );
+			walkAndWrap( node );
+		} else if ( node.nodeType === Node.TEXT_NODE && ! isInsideSkippedTag( node ) ) {
+			if ( node.nodeValue.indexOf( MARK_START ) !== -1 ) {
+				processTextNode( node );
+			}
 		}
 	}
 
 	function init() {
-		walkAndTransform( document.body );
+		walkAndWrap( document.body );
 
 		var observer = new MutationObserver( function ( mutations ) {
 			for ( var i = 0; i < mutations.length; i++ ) {

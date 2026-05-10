@@ -20,6 +20,16 @@ class Klingon_Locale {
 	const PIQAD_VERSION = '1.0.0';
 
 	/**
+	 * Two unused codepoints in the KLI PUA range used as start/end markers
+	 * around actually-translated strings. The companion piqad-transliterate.js
+	 * looks for these and wraps the marked region in a span.klingon-piqad-text
+	 * so the bundled CSS can scope the pIqaD font to translated text only —
+	 * untranslated English admin-bar strings stay in the system font.
+	 */
+	const PIQAD_MARK_START = "\u{F8FA}";
+	const PIQAD_MARK_END   = "\u{F8FB}";
+
+	/**
 	 * Map of text domains we provide translations for, to the filename prefix
 	 * WordPress expects for each in `wp-content/languages/` (or `plugins/`).
 	 *
@@ -58,6 +68,15 @@ class Klingon_Locale {
 		add_action( 'admin_enqueue_scripts',       [ $this, 'enqueue_piqad_assets' ] );
 		add_action( 'login_enqueue_scripts',       [ $this, 'enqueue_piqad_assets' ] );
 		add_action( 'admin_notices',               [ $this, 'maybe_show_piqad_font_notice' ] );
+
+		// Wrap actually-translated strings with PUA markers so the JS can
+		// scope the pIqaD font to translated content only. We hook gettext
+		// rather than gettext_with_context/ngettext_* because all four
+		// ultimately funnel through here in modern WP.
+		add_filter( 'gettext',              [ $this, 'mark_klingon_translation' ],          1000, 3 );
+		add_filter( 'gettext_with_context', [ $this, 'mark_klingon_translation_context' ],  1000, 4 );
+		add_filter( 'ngettext',             [ $this, 'mark_klingon_translation_plural' ],   1000, 5 );
+		add_filter( 'ngettext_with_context',[ $this, 'mark_klingon_translation_plural_ctx' ],1000, 6 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -474,6 +493,52 @@ class Klingon_Locale {
 	 * If the option is enabled but no font file is present, surface that as
 	 * an admin notice so the site owner knows why nothing is rendering.
 	 */
+	/**
+	 * Wrap an actually-translated string in PUA markers so the JS layer
+	 * can scope the pIqaD font to only that text. Untranslated strings
+	 * (translation === original) are returned unchanged.
+	 *
+	 * Skipped when:
+	 *   - pIqaD rendering is off
+	 *   - the string contains < or > (likely HTML — wrapping would break
+	 *     parsing if the markers land inside a tag)
+	 *   - the string is empty / whitespace-only
+	 */
+	private function maybe_mark( string $translation, string $original ): string {
+		if ( ! $this->piqad_active() ) {
+			return $translation;
+		}
+		if ( $translation === $original ) {
+			return $translation;
+		}
+		if ( '' === trim( $translation ) ) {
+			return $translation;
+		}
+		// Don't wrap if the translation already contains markers (re-entry).
+		if ( false !== strpos( $translation, self::PIQAD_MARK_START ) ) {
+			return $translation;
+		}
+		return self::PIQAD_MARK_START . $translation . self::PIQAD_MARK_END;
+	}
+
+	public function mark_klingon_translation( $translation, $text, $domain ) {
+		return $this->maybe_mark( (string) $translation, (string) $text );
+	}
+
+	public function mark_klingon_translation_context( $translation, $text, $context, $domain ) {
+		return $this->maybe_mark( (string) $translation, (string) $text );
+	}
+
+	public function mark_klingon_translation_plural( $translation, $single, $plural, $number, $domain ) {
+		$original = ( 1 == $number ) ? $single : $plural;
+		return $this->maybe_mark( (string) $translation, (string) $original );
+	}
+
+	public function mark_klingon_translation_plural_ctx( $translation, $single, $plural, $number, $context, $domain ) {
+		$original = ( 1 == $number ) ? $single : $plural;
+		return $this->maybe_mark( (string) $translation, (string) $original );
+	}
+
 	public function maybe_show_piqad_font_notice() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
