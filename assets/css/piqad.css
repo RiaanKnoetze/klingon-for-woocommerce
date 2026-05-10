@@ -1,0 +1,54 @@
+/**
+ * Klingon pIqaD rendering styles.
+ *
+ * Loaded only when:
+ *   - The site locale is 'tlh', AND
+ *   - The pIqaD-rendering option is enabled, AND
+ *   - A font file exists at assets/fonts/pIqaD.{woff2,ttf}.
+ *
+ * The body gets the `klingon-piqad` class server-side. The companion
+ * piqad-transliterate.js walks text nodes and rewrites Latin Klingon
+ * (a, b, ch, D, ..., tlh, ', etc.) into the KLI Private Use Area
+ * codepoints (U+F8D0–U+F8F9) the bundled font expects.
+ */
+
+@font-face {
+	font-family: 'Klingon pIqaD';
+	src: url('../fonts/pIqaD.woff2') format('woff2'),
+	     url('../fonts/pIqaD.ttf') format('truetype');
+	font-weight: normal;
+	font-style: normal;
+	font-display: swap;
+}
+
+body.klingon-piqad,
+body.klingon-piqad button,
+body.klingon-piqad select,
+body.klingon-piqad option {
+	font-family: 'Klingon pIqaD', 'Klingon', sans-serif;
+}
+
+/*
+ * Form fields stay in the system font: the JS transliterator skips text
+ * inside <input> and <textarea>, but if we let the font-family cascade
+ * into them, the placeholder/value text would render as boxes. Resetting
+ * here keeps editable fields legible in Latin while the surrounding UI
+ * is in pIqaD.
+ */
+body.klingon-piqad input,
+body.klingon-piqad textarea,
+body.klingon-piqad [contenteditable="true"],
+body.klingon-piqad code,
+body.klingon-piqad pre,
+body.klingon-piqad kbd,
+body.klingon-piqad samp {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/*
+ * Visible cue when a text node is being transliterated — useful while
+ * debugging, harmless in production. Toggle with `body.klingon-piqad-debug`.
+ */
+body.klingon-piqad-debug [data-klingon-piqad="1"] {
+	outline: 1px dashed rgba(186, 48, 48, 0.4);
+}
