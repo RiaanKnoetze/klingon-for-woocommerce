@@ -15,7 +15,8 @@
 @font-face {
 	font-family: 'Klingon pIqaD';
 	src: url('../fonts/pIqaD.woff2') format('woff2'),
-	     url('../fonts/pIqaD.ttf') format('truetype');
+	     url('../fonts/pIqaD.woff')  format('woff'),
+	     url('../fonts/pIqaD.ttf')   format('truetype');
 	font-weight: normal;
 	font-style: normal;
 	font-display: swap;

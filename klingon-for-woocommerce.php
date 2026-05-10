@@ -385,20 +385,21 @@ class Klingon_Locale {
 	}
 
 	/**
-	 * Return the URL of the bundled pIqaD font, preferring .woff2 over .ttf.
-	 * Returns null if neither file is present.
+	 * Return the URL of the best bundled pIqaD font, preferring .woff2 (smallest,
+	 * modern browsers) → .woff (legacy fallback) → .ttf (universal). The CSS
+	 * @font-face declaration lists all three so the browser picks whatever it
+	 * supports; this method only needs to confirm at least one is present.
 	 *
-	 * @return string|null
+	 * @return string|null URL of the best available format, or null if none.
 	 */
 	private function piqad_font_url(): ?string {
 		$dir = plugin_dir_path( __FILE__ ) . 'assets/fonts/';
 		$url = plugin_dir_url( __FILE__ ) . 'assets/fonts/';
 
-		if ( file_exists( $dir . 'pIqaD.woff2' ) ) {
-			return $url . 'pIqaD.woff2';
-		}
-		if ( file_exists( $dir . 'pIqaD.ttf' ) ) {
-			return $url . 'pIqaD.ttf';
+		foreach ( [ 'pIqaD.woff2', 'pIqaD.woff', 'pIqaD.ttf' ] as $file ) {
+			if ( file_exists( $dir . $file ) ) {
+				return $url . $file;
+			}
 		}
 		return null;
 	}
