@@ -8,17 +8,19 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Adds Klingon (tlhIngan Hol) as a selectable WordPress language and ships WooCommerce translations for both PHP and JavaScript UI.
+Adds Klingon (tlhIngan Hol) as a selectable WordPress language with full translations for WordPress core and WooCommerce, across PHP and JavaScript UI.
 
 == Description ==
 
-Klingon for WooCommerce registers **Klingon (tlhIngan Hol)** as a selectable language under *Settings > General > Site Language* and bundles a full set of WooCommerce translations covering both PHP-rendered pages and JavaScript-rendered UI (Cart/Checkout blocks, admin React panels).
+Klingon for WooCommerce registers **Klingon (tlhIngan Hol)** as a selectable language under *Settings > General > Site Language* and bundles a full set of WordPress core translations (`default`, `admin`, `admin-network` domains — ~11,500 strings) plus WooCommerce translations, covering both PHP-rendered pages and JavaScript-rendered UI (Block Editor, Site Editor, Cart/Checkout blocks, admin React panels).
 
 = Features =
 
 * Adds the `tlh` locale to every WordPress language dropdown in the admin.
 * Displays the human-readable label "Klingon (tlhIngan Hol)" instead of the bare locale code.
-* Ships WooCommerce translations in four complementary formats:
+* Translates **WordPress core** across the `default`, `admin`, and `admin-network` text domains (~11,500 strings).
+* Translates **WooCommerce** across the `woocommerce` text domain.
+* Ships translations in four complementary formats:
   * `.mo` — classic compiled binary for `__()`, `_e()`, etc.
   * `.l10n.php` — PHP-cache format (WP 6.5+, faster than `.mo`)
   * `.po` — human-editable source for translators
@@ -65,7 +67,7 @@ WooCommerce will now load Klingon strings automatically — both the PHP admin a
 
 = Will other plugins be translated too? =
 
-No — only WooCommerce strings are covered. To add translations for other plugins, drop their `.mo` / `.l10n.php` / `.json` files into the `languages/` folder and extend the relevant filters in `klingon-for-woocommerce.php` (`load_textdomain_mofile`, `load_translation_file`, `load_script_translation_file`).
+WordPress core (default/admin/admin-network) and WooCommerce are bundled. Other plugins aren't — but adding them is straightforward: drop their translation files into the `languages/` folder and add an entry to the `PLUGIN_DOMAINS` map at the top of `klingon-for-woocommerce.php`. The runtime filters and activation copy logic pick up new domains automatically.
 
 = The dropdown still shows "tlh" — what happened? =
 
@@ -99,8 +101,8 @@ Yes. The plugin only sets up the locale and translation files; switching logic i
 = 1.0.0 =
 * Initial release.
 * Adds `tlh` to the WordPress language list with the human-readable label "Klingon (tlhIngan Hol)".
-* Bundles WooCommerce translations in `.mo`, `.po`, `.l10n.php`, and per-script `.json` formats.
-* Hooks `load_textdomain_mofile`, `load_translation_file` (WP 6.5+), and `load_script_translation_file` to serve the bundled files at runtime.
+* Bundles WordPress core translations (`default`, `admin`, `admin-network` domains) and WooCommerce translations in `.mo`, `.po`, `.l10n.php`, and per-script `.json` formats.
+* Hooks `load_textdomain_mofile`, `load_translation_file` (WP 6.5+), and `load_script_translation_file` to serve the bundled files at runtime across all four domains.
 
 == Upgrade Notice ==
 

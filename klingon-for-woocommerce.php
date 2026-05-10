@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Klingon for WooCommerce
  * Plugin URI:        https://github.com/RiaanKnoetze/klingon-for-woocommerce
- * Description:       Adds Klingon (tlhIngan Hol) as a selectable language in WordPress Settings, and provides WooCommerce translations in Klingon.
+ * Description:       Adds Klingon (tlhIngan Hol) as a selectable language in WordPress, with translations for WordPress core and WooCommerce.
  * Version:           1.0.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
@@ -15,20 +15,38 @@ defined( 'ABSPATH' ) || exit;
 
 class Klingon_Locale {
 
-	const LOCALE   = 'tlh';
-	const WC_DOMAIN = 'woocommerce';
+	const LOCALE = 'tlh';
+
+	/**
+	 * Map of text domains we provide translations for, to the filename prefix
+	 * WordPress expects for each in `wp-content/languages/` (or `plugins/`).
+	 *
+	 * - 'default' (core) lives at WP_LANG_DIR/{locale}.mo (no prefix).
+	 * - 'admin'         at WP_LANG_DIR/admin-{locale}.mo
+	 * - 'admin-network' at WP_LANG_DIR/admin-network-{locale}.mo
+	 * - 'woocommerce'   at WP_LANG_DIR/plugins/woocommerce-{locale}.mo
+	 */
+	const CORE_DOMAINS = [
+		'default'       => '',
+		'admin'         => 'admin-',
+		'admin-network' => 'admin-network-',
+	];
+
+	const PLUGIN_DOMAINS = [
+		'woocommerce' => 'woocommerce-',
+	];
 
 	public function __construct() {
 		register_activation_hook( __FILE__, [ $this, 'activate' ] );
 		register_deactivation_hook( __FILE__, [ $this, 'deactivate' ] );
 
-		add_filter( 'get_available_languages',             [ $this, 'add_klingon_to_language_list' ],     10, 2 );
-		add_filter( 'translations_api_result',                  [ $this, 'add_klingon_translation_metadata' ], 10, 3 );
-		add_filter( 'site_transient_available_translations',    [ $this, 'inject_klingon_translation' ] );
+		add_filter( 'get_available_languages',                       [ $this, 'add_klingon_to_language_list' ],     10, 2 );
+		add_filter( 'translations_api_result',                       [ $this, 'add_klingon_translation_metadata' ], 10, 3 );
+		add_filter( 'site_transient_available_translations',         [ $this, 'inject_klingon_translation' ] );
 		add_filter( 'pre_set_site_transient_available_translations', [ $this, 'inject_klingon_translation' ] );
-		add_filter( 'load_textdomain_mofile',              [ $this, 'load_woocommerce_klingon' ],         10, 2 );
-		add_filter( 'load_translation_file',               [ $this, 'load_woocommerce_klingon_translation' ], 10, 3 );
-		add_filter( 'load_script_translation_file',        [ $this, 'load_woocommerce_klingon_script' ],  10, 3 );
+		add_filter( 'load_textdomain_mofile',                        [ $this, 'load_klingon_mofile' ],              10, 2 );
+		add_filter( 'load_translation_file',                         [ $this, 'load_klingon_translation' ],         10, 3 );
+		add_filter( 'load_script_translation_file',                  [ $this, 'load_klingon_script' ],              10, 3 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -36,47 +54,58 @@ class Klingon_Locale {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * On activation, copy a minimal stub .mo into wp-content/languages/ so
-	 * WordPress includes "tlh" when it scans that directory.
-	 * The get_available_languages filter handles the same job at runtime, but
-	 * placing a real file means the locale persists even when the filter hasn't
-	 * fired yet (e.g. during WP-CLI runs).
+	 * Mirror bundled translations into the locations WordPress checks natively,
+	 * so files load on the very first request — even before our runtime filters
+	 * fire (e.g. WP-CLI, fresh requests, multisite locale switches).
+	 *
+	 * Core domains land in WP_LANG_DIR; plugin domains in WP_LANG_DIR/plugins/.
 	 */
 	public function activate() {
-		$stub_source = plugin_dir_path( __FILE__ ) . 'languages/stub/tlh.mo';
-		$stub_dest   = WP_LANG_DIR . '/tlh.mo';
+		$src_dir   = plugin_dir_path( __FILE__ ) . 'languages/';
+		$core_dir  = trailingslashit( WP_LANG_DIR );
+		$plugin_dir = $core_dir . 'plugins/';
 
-		if ( ! file_exists( $stub_dest ) && file_exists( $stub_source ) ) {
-			copy( $stub_source, $stub_dest );
+		if ( ! is_dir( $plugin_dir ) ) {
+			wp_mkdir_p( $plugin_dir );
 		}
 
-		// Mirror every WooCommerce translation asset into wp-content/languages/plugins/
-		// so they load even before our runtime filters fire (e.g. WP-CLI, fresh requests).
-		// Covers: .mo, .po, .l10n.php (WP 6.5+), and per-script .json files.
-		$src_dir = plugin_dir_path( __FILE__ ) . 'languages/';
-		$dst_dir = trailingslashit( WP_LANG_DIR ) . 'plugins/';
-
-		if ( ! is_dir( $dst_dir ) ) {
-			wp_mkdir_p( $dst_dir );
-		}
-
-		foreach ( glob( $src_dir . 'woocommerce-tlh*.{mo,po,json,php}', GLOB_BRACE ) as $src ) {
-			$dst = $dst_dir . basename( $src );
-			if ( ! file_exists( $dst ) ) {
-				@copy( $src, $dst );
+		$copy = static function ( $pattern, $dst_dir ) use ( $src_dir ) {
+			$matches = glob( $src_dir . $pattern, GLOB_BRACE );
+			if ( ! $matches ) {
+				return;
 			}
+			foreach ( $matches as $src ) {
+				$dst = $dst_dir . basename( $src );
+				if ( ! file_exists( $dst ) ) {
+					@copy( $src, $dst );
+				}
+			}
+		};
+
+		// Core domains: tlh.*, admin-tlh.*, admin-network-tlh.* and their per-script JSON.
+		foreach ( self::CORE_DOMAINS as $prefix ) {
+			$copy( $prefix . self::LOCALE . '*.{mo,po,json,php}', $core_dir );
+		}
+
+		// Plugin domains (WooCommerce): woocommerce-tlh.* and per-script JSON.
+		foreach ( self::PLUGIN_DOMAINS as $prefix ) {
+			$copy( $prefix . self::LOCALE . '*.{mo,po,json,php}', $plugin_dir );
 		}
 	}
 
 	/**
-	 * On deactivation, clean up the stub core file we placed.
-	 * We leave the WooCommerce language file in place; removing it here could
-	 * surprise the site owner if they deactivate/reactivate.
+	 * On deactivation, remove the core-domain files we placed so WordPress
+	 * stops claiming Klingon translations exist when the plugin isn't active.
+	 * Plugin-domain files in WP_LANG_DIR/plugins/ are left in place to avoid
+	 * surprising the site owner during a deactivate/reactivate cycle.
 	 */
 	public function deactivate() {
-		$stub = WP_LANG_DIR . '/tlh.mo';
-		if ( file_exists( $stub ) ) {
-			unlink( $stub );
+		$core_dir = trailingslashit( WP_LANG_DIR );
+
+		foreach ( self::CORE_DOMAINS as $prefix ) {
+			foreach ( glob( $core_dir . $prefix . self::LOCALE . '*.{mo,po,json,php}', GLOB_BRACE ) as $file ) {
+				@unlink( $file );
+			}
 		}
 	}
 
@@ -86,8 +115,6 @@ class Klingon_Locale {
 
 	/**
 	 * Inject 'tlh' into whichever language-list WordPress is building.
-	 * This covers Settings > General, Network Settings, and any call to
-	 * get_available_languages() throughout the admin.
 	 *
 	 * @param string[]    $languages  Already-discovered locale codes.
 	 * @param string|null $dir        The directory that was scanned (may be null).
@@ -104,10 +131,10 @@ class Klingon_Locale {
 	 * Inject Klingon metadata into the translations API result so the language
 	 * dropdown shows a proper name instead of the raw "tlh" locale code.
 	 *
-	 * Hooked on `translations_api_result` (fires after the HTTP call, value is
-	 * the real API response). The cache-miss path of wp_get_available_translations()
-	 * uses this directly and then writes it to the site transient, so Klingon
-	 * persists in the cache for subsequent renders.
+	 * Hooked on `translations_api_result` (fires after the HTTP call). The
+	 * cache-miss path of wp_get_available_translations() uses this directly
+	 * and then writes it to the site transient, so Klingon persists in cache
+	 * for subsequent renders.
 	 *
 	 * @param array|WP_Error $result Translations API result.
 	 * @param string         $type   API type ('core', 'plugins', 'themes').
@@ -125,16 +152,7 @@ class Klingon_Locale {
 			}
 		}
 
-		$result['translations'][] = [
-			'language'     => self::LOCALE,
-			'version'      => get_bloginfo( 'version' ),
-			'updated'      => '',
-			'english_name' => 'Klingon',
-			'native_name'  => 'Klingon (tlhIngan Hol)',
-			'package'      => '',
-			'iso'          => [ 'tlh' ],
-			'strings'      => [ 'continue' => 'taH' ],
-		];
+		$result['translations'][] = $this->klingon_translation_entry();
 
 		return $result;
 	}
@@ -153,99 +171,117 @@ class Klingon_Locale {
 		}
 
 		if ( ! isset( $translations[ self::LOCALE ] ) ) {
-			$translations[ self::LOCALE ] = [
-				'language'     => self::LOCALE,
-				'version'      => get_bloginfo( 'version' ),
-				'updated'      => '',
-				'english_name' => 'Klingon',
-				'native_name'  => 'Klingon (tlhIngan Hol)',
-				'package'      => '',
-				'iso'          => [ 'tlh' ],
-				'strings'      => [ 'continue' => 'taH' ],
-			];
+			$translations[ self::LOCALE ] = $this->klingon_translation_entry();
 		}
 
 		return $translations;
 	}
 
+	private function klingon_translation_entry(): array {
+		return [
+			'language'     => self::LOCALE,
+			'version'      => get_bloginfo( 'version' ),
+			'updated'      => '',
+			'english_name' => 'Klingon',
+			'native_name'  => 'Klingon (tlhIngan Hol)',
+			'package'      => '',
+			'iso'          => [ 'tlh' ],
+			'strings'      => [ 'continue' => 'taH' ],
+		];
+	}
+
 	// -------------------------------------------------------------------------
-	// WooCommerce translations
+	// Translation file routing
 	// -------------------------------------------------------------------------
 
 	/**
-	 * When WooCommerce (or anything else loading the 'woocommerce' text domain)
-	 * tries to read a .mo file and the site locale is Klingon, redirect the
-	 * load to our bundled translation instead.
+	 * Resolve the bundled path for a given text domain, preferring .l10n.php
+	 * (PHP-cache, WP 6.5+) over .mo when both exist.
 	 *
-	 * WordPress looks for plugin translations in (in order):
-	 *   1. wp-content/languages/plugins/woocommerce-{locale}.mo  (user-managed)
-	 *   2. The plugin's own /languages/ directory
-	 *
-	 * We hook here so our bundled file is always used, even if WooCommerce
-	 * itself ships an empty or missing tlh.mo at some point in the future.
-	 *
-	 * @param string $mofile  Full path WordPress is about to load.
-	 * @param string $domain  Text domain being loaded.
-	 * @return string
+	 * @param string $domain Text domain (must be a known core or plugin domain).
+	 * @return string|null Full path to the bundled file, or null if none found.
 	 */
-	public function load_woocommerce_klingon( string $mofile, string $domain ): string {
-		if ( self::WC_DOMAIN !== $domain ) {
-			return $mofile;
+	private function bundled_path_for_domain( string $domain ): ?string {
+		$prefix = self::CORE_DOMAINS[ $domain ] ?? self::PLUGIN_DOMAINS[ $domain ] ?? null;
+		if ( null === $prefix ) {
+			return null;
 		}
 
+		$lang_dir = plugin_dir_path( __FILE__ ) . 'languages/';
+		$base     = $lang_dir . $prefix . self::LOCALE;
+
+		if ( file_exists( $base . '.l10n.php' ) ) {
+			return $base . '.l10n.php';
+		}
+		if ( file_exists( $base . '.mo' ) ) {
+			return $base . '.mo';
+		}
+		return null;
+	}
+
+	/**
+	 * Legacy `load_textdomain_mofile` filter — used by older WP versions and
+	 * code paths that pre-date `load_translation_file`. Still useful as a
+	 * belt-and-braces fallback.
+	 *
+	 * @param string $mofile Path WP is about to load.
+	 * @param string $domain Text domain being loaded.
+	 * @return string
+	 */
+	public function load_klingon_mofile( string $mofile, string $domain ): string {
 		if ( get_locale() !== self::LOCALE ) {
 			return $mofile;
 		}
 
-		$bundled = plugin_dir_path( __FILE__ ) . 'languages/woocommerce-tlh.mo';
+		$bundled = $this->bundled_path_for_domain( $domain );
+		if ( null === $bundled ) {
+			return $mofile;
+		}
 
-		return file_exists( $bundled ) ? $bundled : $mofile;
+		// load_textdomain_mofile expects a .mo path specifically.
+		if ( substr( $bundled, -3 ) === '.mo' ) {
+			return $bundled;
+		}
+
+		$mo = substr( $bundled, 0, -9 ) . '.mo'; // swap .l10n.php → .mo
+		return file_exists( $mo ) ? $mo : $mofile;
 	}
 
 	/**
-	 * WP 6.5+ load_translation_file filter: covers both .mo and .l10n.php formats.
-	 * Fires after load_textdomain_mofile and is the canonical hook for redirecting
-	 * the binary (or PHP-cache) translation file. We prefer .l10n.php when present
-	 * because WP loads it faster than parsing a .mo.
+	 * WP 6.5+ `load_translation_file` filter — canonical hook for redirecting
+	 * the binary (.mo) or PHP-cache (.l10n.php) translation file.
 	 *
 	 * @param string $file   Path WordPress is about to load.
 	 * @param string $domain Text domain.
 	 * @param string $locale Locale being loaded.
 	 * @return string
 	 */
-	public function load_woocommerce_klingon_translation( string $file, string $domain, string $locale ): string {
-		if ( self::WC_DOMAIN !== $domain || self::LOCALE !== $locale ) {
+	public function load_klingon_translation( string $file, string $domain, string $locale ): string {
+		if ( self::LOCALE !== $locale ) {
 			return $file;
 		}
 
-		$lang_dir = plugin_dir_path( __FILE__ ) . 'languages/';
-
-		$php = $lang_dir . 'woocommerce-tlh.l10n.php';
-		if ( file_exists( $php ) ) {
-			return $php;
-		}
-
-		$mo = $lang_dir . 'woocommerce-tlh.mo';
-		if ( file_exists( $mo ) ) {
-			return $mo;
-		}
-
-		return $file;
+		$bundled = $this->bundled_path_for_domain( $domain );
+		return $bundled ?? $file;
 	}
 
 	/**
-	 * Redirect WooCommerce JS script translations (per-handle .json files) to our
-	 * bundled copies when the locale is Klingon. WP looks up files by an md5 of
-	 * the script's source path; the filename WP requests is what we look for in
-	 * our /languages/ directory.
+	 * Redirect per-script JSON translations to our bundled copies when the
+	 * locale is Klingon and the domain is one we cover. WP looks up files by
+	 * an md5 of the script's source path — the filename WP requests is what we
+	 * look for in our /languages/ directory.
 	 *
 	 * @param string|false $file   Path WordPress is about to load (false if not found).
 	 * @param string       $handle Script handle.
 	 * @param string       $domain Text domain.
 	 * @return string|false
 	 */
-	public function load_woocommerce_klingon_script( $file, string $handle, string $domain ) {
-		if ( self::WC_DOMAIN !== $domain || get_locale() !== self::LOCALE ) {
+	public function load_klingon_script( $file, string $handle, string $domain ) {
+		if ( get_locale() !== self::LOCALE ) {
+			return $file;
+		}
+
+		if ( ! isset( self::CORE_DOMAINS[ $domain ] ) && ! isset( self::PLUGIN_DOMAINS[ $domain ] ) ) {
 			return $file;
 		}
 
@@ -255,7 +291,6 @@ class Klingon_Locale {
 		}
 
 		$bundled = plugin_dir_path( __FILE__ ) . 'languages/' . $basename;
-
 		return file_exists( $bundled ) ? $bundled : $file;
 	}
 }
