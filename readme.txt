@@ -1,4 +1,4 @@
-=== Klingon Locale ===
+=== Klingon for WooCommerce ===
 Contributors: riaanknoetze
 Tags: klingon, language, locale, woocommerce, i18n
 Requires at least: 6.4
@@ -12,7 +12,7 @@ Adds Klingon (tlhIngan Hol) as a selectable WordPress language and ships WooComm
 
 == Description ==
 
-Klingon Locale registers **Klingon (tlhIngan Hol)** as a selectable language under *Settings > General > Site Language* and bundles a full set of WooCommerce translations covering both PHP-rendered pages and JavaScript-rendered UI (Cart/Checkout blocks, admin React panels).
+Klingon for WooCommerce registers **Klingon (tlhIngan Hol)** as a selectable language under *Settings > General > Site Language* and bundles a full set of WooCommerce translations covering both PHP-rendered pages and JavaScript-rendered UI (Cart/Checkout blocks, admin React panels).
 
 = Features =
 

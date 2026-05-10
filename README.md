@@ -1,4 +1,4 @@
-# Klingon Locale
+# Klingon for WooCommerce
 
 Adds **Klingon (tlhIngan Hol)** as a selectable language in WordPress, complete with WooCommerce translations covering PHP, server-side templates, and JavaScript-rendered UI (Cart/Checkout blocks, the admin React UI, etc.).
 

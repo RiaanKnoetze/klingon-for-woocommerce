@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name:       Klingon Locale
- * Plugin URI:        https://github.com/riaanknoetze/klingon-locale
+ * Plugin Name:       Klingon for WooCommerce
+ * Plugin URI:        https://github.com/RiaanKnoetze/klingon-for-woocommerce
  * Description:       Adds Klingon (tlhIngan Hol) as a selectable language in WordPress Settings, and provides WooCommerce translations in Klingon.
  * Version:           1.0.0
  * Requires at least: 6.4
