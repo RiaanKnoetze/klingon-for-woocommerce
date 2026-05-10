@@ -4,15 +4,12 @@
  * Loaded only when:
  *   - The site locale is 'tlh', AND
  *   - The pIqaD-rendering option is enabled, AND
- *   - A font file exists at assets/fonts/pIqaD.{woff2,woff,ttf}.
+ *   - A font file exists at assets/fonts/pIqaD.{woff2,ttf}.
  *
- * The font is applied ONLY to text that the gettext filter has marked as
- * actually-translated Klingon (wrapped in <span class="klingon-piqad-text">
- * by piqad-transliterate.js after detecting the server-side marker pair).
- *
- * This prevents the pIqaD font from clobbering untranslated English text
- * (e.g. admin-bar strings that haven't been translated yet) — those fall
- * back to the page's normal font.
+ * The body gets the `klingon-piqad` class server-side. The companion
+ * piqad-transliterate.js walks text nodes and rewrites Latin Klingon
+ * (a, b, ch, D, ..., tlh, ', etc.) into the KLI Private Use Area
+ * codepoints (U+F8D0–U+F8F9) the bundled font expects.
  */
 
 @font-face {
@@ -25,28 +22,34 @@
 	font-display: swap;
 }
 
-body.klingon-piqad .klingon-piqad-text {
-	font-family: 'Klingon pIqaD', sans-serif;
+body.klingon-piqad,
+body.klingon-piqad button,
+body.klingon-piqad select,
+body.klingon-piqad option {
+	font-family: 'Klingon pIqaD', 'Klingon', sans-serif;
 }
 
 /*
- * Form fields and code blocks stay in the system font even when wrapped
- * in a marker span. Editing pIqaD glyphs is impractical, and code/kbd
- * usually contains ASCII identifiers we don't want re-rendered.
+ * Form fields stay in the system font: the JS transliterator skips text
+ * inside <input> and <textarea>, but if we let the font-family cascade
+ * into them, the placeholder/value text would render as boxes. Resetting
+ * here keeps editable fields legible in Latin while the surrounding UI
+ * is in pIqaD.
  */
-body.klingon-piqad input.klingon-piqad-text,
-body.klingon-piqad textarea.klingon-piqad-text,
-body.klingon-piqad code .klingon-piqad-text,
-body.klingon-piqad pre .klingon-piqad-text,
-body.klingon-piqad kbd .klingon-piqad-text,
-body.klingon-piqad samp .klingon-piqad-text,
-body.klingon-piqad [contenteditable="true"] .klingon-piqad-text {
-	font-family: inherit;
+body.klingon-piqad input,
+body.klingon-piqad textarea,
+body.klingon-piqad [contenteditable="true"],
+body.klingon-piqad code,
+body.klingon-piqad pre,
+body.klingon-piqad kbd,
+body.klingon-piqad samp {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 /*
- * Debug: outline transliterated nodes when body has the debug class.
+ * Visible cue when a text node is being transliterated — useful while
+ * debugging, harmless in production. Toggle with `body.klingon-piqad-debug`.
  */
-body.klingon-piqad-debug .klingon-piqad-text {
+body.klingon-piqad-debug [data-klingon-piqad="1"] {
 	outline: 1px dashed rgba(186, 48, 48, 0.4);
 }
