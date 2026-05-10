@@ -15,7 +15,9 @@ defined( 'ABSPATH' ) || exit;
 
 class Klingon_Locale {
 
-	const LOCALE = 'tlh';
+	const LOCALE        = 'tlh';
+	const PIQAD_OPTION  = 'klingon_piqad_enabled';
+	const PIQAD_VERSION = '1.0.1';
 
 	/**
 	 * Map of text domains we provide translations for, to the filename prefix
@@ -47,6 +49,15 @@ class Klingon_Locale {
 		add_filter( 'load_textdomain_mofile',                        [ $this, 'load_klingon_mofile' ],              10, 2 );
 		add_filter( 'load_translation_file',                         [ $this, 'load_klingon_translation' ],         10, 3 );
 		add_filter( 'load_script_translation_file',                  [ $this, 'load_klingon_script' ],              10, 3 );
+
+		// pIqaD rendering.
+		add_action( 'admin_init',                  [ $this, 'register_piqad_setting' ] );
+		add_filter( 'body_class',                  [ $this, 'add_piqad_body_class' ] );
+		add_filter( 'admin_body_class',            [ $this, 'add_piqad_admin_body_class' ] );
+		add_action( 'wp_enqueue_scripts',          [ $this, 'enqueue_piqad_assets' ] );
+		add_action( 'admin_enqueue_scripts',       [ $this, 'enqueue_piqad_assets' ] );
+		add_action( 'login_enqueue_scripts',       [ $this, 'enqueue_piqad_assets' ] );
+		add_action( 'admin_notices',               [ $this, 'maybe_show_piqad_font_notice' ] );
 	}
 
 	// -------------------------------------------------------------------------
@@ -292,6 +303,201 @@ class Klingon_Locale {
 
 		$bundled = plugin_dir_path( __FILE__ ) . 'languages/' . $basename;
 		return file_exists( $bundled ) ? $bundled : $file;
+	}
+
+	// -------------------------------------------------------------------------
+	// pIqaD rendering
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Register the "Render Klingon in pIqaD script" checkbox under
+	 * Settings > General. The setting is locale-agnostic — it has no effect
+	 * unless the active locale is `tlh`, but storing it persistently means
+	 * it survives locale changes.
+	 */
+	public function register_piqad_setting() {
+		register_setting(
+			'general',
+			self::PIQAD_OPTION,
+			[
+				'type'              => 'boolean',
+				'sanitize_callback' => 'rest_sanitize_boolean',
+				'default'           => false,
+				'show_in_rest'      => true,
+			]
+		);
+
+		add_settings_field(
+			self::PIQAD_OPTION,
+			__( 'Klingon Display', 'klingon-for-woocommerce' ),
+			[ $this, 'render_piqad_setting_field' ],
+			'general',
+			'default',
+			[ 'label_for' => self::PIQAD_OPTION ]
+		);
+	}
+
+	public function render_piqad_setting_field() {
+		$enabled  = (bool) get_option( self::PIQAD_OPTION, false );
+		$has_font = $this->piqad_font_url() !== null;
+		?>
+		<label for="<?php echo esc_attr( self::PIQAD_OPTION ); ?>">
+			<input
+				type="checkbox"
+				name="<?php echo esc_attr( self::PIQAD_OPTION ); ?>"
+				id="<?php echo esc_attr( self::PIQAD_OPTION ); ?>"
+				value="1"
+				<?php checked( $enabled ); ?>
+			/>
+			<?php esc_html_e( 'Render Klingon in pIqaD script (when site language is Klingon).', 'klingon-for-woocommerce' ); ?>
+		</label>
+		<p class="description">
+			<?php
+			if ( $has_font ) {
+				esc_html_e(
+					'Latin Klingon text will be transliterated to pIqaD glyphs and rendered with the bundled font. Form inputs and code blocks stay in the system font for editability.',
+					'klingon-for-woocommerce'
+				);
+			} else {
+				printf(
+					/* translators: %s: assets/fonts/ folder path */
+					esc_html__( 'No pIqaD font detected. Drop a pIqaD font file (KLI-encoded) into %s as pIqaD.woff2 or pIqaD.ttf to activate this feature.', 'klingon-for-woocommerce' ),
+					'<code>assets/fonts/</code>'
+				);
+			}
+			?>
+		</p>
+		<?php
+	}
+
+	/**
+	 * Whether pIqaD rendering should be active for the current request.
+	 * Requires: locale is tlh, option is enabled, and a font file exists.
+	 */
+	private function piqad_active(): bool {
+		if ( get_locale() !== self::LOCALE ) {
+			return false;
+		}
+		if ( ! (bool) get_option( self::PIQAD_OPTION, false ) ) {
+			return false;
+		}
+		return $this->piqad_font_url() !== null;
+	}
+
+	/**
+	 * Return the URL of the best bundled pIqaD font, preferring .woff2 (smallest,
+	 * modern browsers) → .woff (legacy fallback) → .ttf (universal). The CSS
+	 * @font-face declaration lists all three so the browser picks whatever it
+	 * supports; this method only needs to confirm at least one is present.
+	 *
+	 * @return string|null URL of the best available format, or null if none.
+	 */
+	private function piqad_font_url(): ?string {
+		$dir = plugin_dir_path( __FILE__ ) . 'assets/fonts/';
+		$url = plugin_dir_url( __FILE__ ) . 'assets/fonts/';
+
+		foreach ( [ 'pIqaD.woff2', 'pIqaD.woff', 'pIqaD.ttf' ] as $file ) {
+			if ( file_exists( $dir . $file ) ) {
+				return $url . $file;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Front-end body_class filter — add `klingon-piqad` so the bundled CSS
+	 * applies its font-family rules.
+	 *
+	 * @param string[] $classes
+	 * @return string[]
+	 */
+	public function add_piqad_body_class( array $classes ): array {
+		if ( $this->piqad_active() ) {
+			$classes[] = 'klingon-piqad';
+		}
+		return $classes;
+	}
+
+	/**
+	 * Admin equivalent. admin_body_class is a space-separated string, not array.
+	 *
+	 * @param string $classes
+	 * @return string
+	 */
+	public function add_piqad_admin_body_class( string $classes ): string {
+		if ( $this->piqad_active() ) {
+			$classes .= ' klingon-piqad ';
+		}
+		return $classes;
+	}
+
+	/**
+	 * Enqueue the pIqaD stylesheet and transliterator JS on the front-end,
+	 * admin, and login screens.
+	 *
+	 * The login screen has no body_class filter that we hook earlier, so we
+	 * also inject the class via `body { ... }` — handled inline below.
+	 */
+	public function enqueue_piqad_assets() {
+		if ( ! $this->piqad_active() ) {
+			return;
+		}
+
+		$base = plugin_dir_url( __FILE__ );
+
+		wp_enqueue_style(
+			'klingon-piqad',
+			$base . 'assets/css/piqad.css',
+			[],
+			self::PIQAD_VERSION
+		);
+
+		wp_enqueue_script(
+			'klingon-piqad',
+			$base . 'assets/js/piqad-transliterate.js',
+			[],
+			self::PIQAD_VERSION,
+			true
+		);
+
+		// Login page has no body_class filter; inject the class via JS.
+		if ( did_action( 'login_enqueue_scripts' ) ) {
+			wp_add_inline_script(
+				'klingon-piqad',
+				'document.body.classList.add("klingon-piqad");',
+				'before'
+			);
+		}
+	}
+
+	/**
+	 * If the option is enabled but no font file is present, surface that as
+	 * an admin notice so the site owner knows why nothing is rendering.
+	 */
+	public function maybe_show_piqad_font_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( ! (bool) get_option( self::PIQAD_OPTION, false ) ) {
+			return;
+		}
+		if ( $this->piqad_font_url() !== null ) {
+			return;
+		}
+		?>
+		<div class="notice notice-warning">
+			<p>
+				<strong><?php esc_html_e( 'Klingon for WooCommerce', 'klingon-for-woocommerce' ); ?>:</strong>
+				<?php
+				printf(
+					/* translators: %s: relative font folder path */
+					esc_html__( 'pIqaD rendering is enabled, but no pIqaD font was found. Drop a KLI-encoded pIqaD font into %s named pIqaD.woff2 (or pIqaD.ttf) to activate it.', 'klingon-for-woocommerce' ),
+					'<code>wp-content/plugins/klingon-locale/assets/fonts/</code>'
+				);
+				?>
+			</p>
+		</div>
+		<?php
 	}
 }
 
