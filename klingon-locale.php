@@ -7,7 +7,7 @@
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Riaan Knoetze
- * Text Domain:       klingon-locale
+ * Text Domain:       klingon-for-woocommerce
  * Domain Path:       /languages
  */
 
