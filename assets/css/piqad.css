@@ -23,11 +23,19 @@
 }
 
 body.klingon-piqad,
-body.klingon-piqad button,
-body.klingon-piqad select,
-body.klingon-piqad option {
-	font-family: 'Klingon pIqaD', 'Klingon', sans-serif;
+body.klingon-piqad * {
+	font-family: 'Klingon pIqaD', 'Klingon', sans-serif !important;
 }
+
+/*
+ * Many WP admin / WooCommerce elements (`.nav-tab`, headings, buttons,
+ * postbox titles, …) declare their own `font-family`, which would mask
+ * the pIqaD inheritance from <body> and leave the transliterated PUA
+ * characters rendering in a fallback font with no glyphs in the
+ * U+F8D0–F8F9 range — i.e. blank tabs and headings. The wildcard above
+ * forces every descendant onto the pIqaD font; the reset below pulls
+ * editable / monospace contexts back to a Latin-capable font.
+ */
 
 /*
  * Form fields stay in the system font: the JS transliterator skips text
@@ -43,7 +51,7 @@ body.klingon-piqad code,
 body.klingon-piqad pre,
 body.klingon-piqad kbd,
 body.klingon-piqad samp {
-	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
 
 /*

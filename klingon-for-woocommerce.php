@@ -17,7 +17,7 @@ class Klingon_Locale {
 
 	const LOCALE        = 'tlh';
 	const PIQAD_OPTION  = 'klingon_piqad_enabled';
-	const PIQAD_VERSION = '1.0.0';
+	const PIQAD_VERSION = '1.0.1';
 
 	/**
 	 * Map of text domains we provide translations for, to the filename prefix
